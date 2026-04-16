@@ -102,7 +102,7 @@
 8. [x] Credencial Supabase en n8n — "Supabase UrbanStep"
 9. [x] Credencial Telegram en n8n — "Telegram UrbanStep"
 10. [x] Paso 1 implementado en n8n — workflow UrbanStep ID: `WystqHlqarqWa4jB`
-11. [ ] Paso 2: Análisis OpenAI (prompt dual)
+11. [x] Paso 2 implementado — 7 nodos: historial, contexto, GPT 2a, guardar respuesta, GPT 2b, parsear, guardar análisis
 12. [ ] Paso 3: Router 6 ramas
 13. [ ] Paso 4: Acciones (HubSpot, Slack, Gmail)
 14. [ ] 3 casos de prueba para defensa
@@ -138,7 +138,21 @@ Telegram Trigger → Extraer Datos → Buscar Cliente → IF Cliente Existe?
 - Cliente Victor Duart creado en tabla clientes (telegram_id: 8704924722) ✓
 - Mensaje guardado en tabla mensajes con cliente_id vinculado ✓
 
-**Pasos 2, 3, 4:** pendientes — se agregan al mismo workflow `WystqHlqarqWa4jB`
+**Paso 2 (COMPLETO — pendiente test end-to-end):**
+```
+Guardar Mensaje → Obtener Historial → Construir Contexto (Code)
+  → GPT 2a Conversacional (gpt-4o-mini, temp 0.7, HTTP Request)
+  → Guardar Respuesta Asistente (mensajes, direccion: salida)
+  → GPT 2b Análisis JSON (gpt-4o, temp 0.0, JSON mode, HTTP Request)
+  → Parsear Análisis (Code)
+  → Guardar Análisis (conversaciones)
+```
+- Prompts completos en "Construir Contexto" con few-shot examples
+- Credencial OpenAI: "OpenAI UrbanStep"
+- **NOTA:** A evaluar — reemplazar HTTP Requests por nodos LangChain nativos de n8n (el profesor los usa). Víctor traerá JSON de ejemplo de la clase para comparar.
+- **NOTA:** Crear workflow paralelo "UrbanStep — Aprendizaje" para estudiar sin afectar el master.
+
+**Pasos 3, 4:** pendientes — se agregan al mismo workflow `WystqHlqarqWa4jB`
 
 ---
 
@@ -151,6 +165,16 @@ Telegram Trigger → Extraer Datos → Buscar Cliente → IF Cliente Existe?
 - Expertise de Excalidraw (JSON directo + iteración visual) exportado a CLAUDE.md
 - Templates CLAUDE.md, CONTEXTO.md, HANDOVER.md creados en `plantilla-nuevo-proyecto`
 - Archivos duplicados eliminados de `proyecto-integrador`
+
+### Log 2026-04-16 sesión 2 (Paso 2 implementado)
+- API key OpenAI creada en platform.openai.com — ATENCIÓN: key original fue expuesta en chat, regenerada inmediatamente
+- Credencial "OpenAI UrbanStep" creada en n8n
+- Paso 2 implementado (7 nodos via MCP n8n): Obtener Historial, Construir Contexto (Code con prompts dual + few-shot), GPT 2a Conversacional (gpt-4o-mini), Guardar Respuesta Asistente, GPT 2b Análisis JSON (gpt-4o JSON mode), Parsear Análisis (Code), Guardar Análisis (conversaciones)
+- Total: 13 nodos en el workflow UrbanStep
+- Git inicializado, repo GitHub creado: github.com/VictorUala/UrbanStep
+- Pendiente: test end-to-end Paso 2, luego Paso 3 (Router)
+- Pendiente: evaluar reemplazo de HTTP Requests por nodos LangChain nativos (ver JSON del profesor)
+- Estrategia acordada: crear workflow paralelo para aprendizaje sin tocar el master
 
 ### Log 2026-04-16 (sesión de implementación — Paso 1 completo)
 - Cambio de modelo: Opus → Sonnet 4.6 (más eficiente para esta etapa)
