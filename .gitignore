@@ -1,0 +1,20 @@
+# Credenciales y secretos
+.env
+.env.*
+secrets.*
+*.key
+*.pem
+
+# n8n exports con credenciales
+*credentials*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+
+# Logs locales
+*.log
