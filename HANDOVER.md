@@ -119,9 +119,9 @@
 | MCP Supabase | ✅ conectado | Proyecto ID: `wigpybyzjwtjiixnfymf` |
 | Supabase | ✅ 4 tablas | clientes, mensajes, conversaciones, logs |
 | Telegram Bot | ✅ operativo | Credencial en n8n: "Telegram UrbanStep" |
-| OpenAI | ⏳ pendiente | Credencial aún no creada en n8n |
-| HubSpot | ⏳ pendiente | Paso 4 |
-| Slack | ⏳ pendiente | Paso 4 |
+| OpenAI | ✅ operativo | Credencial "OpenAI UrbanStep" en n8n |
+| HubSpot | ✅ listo | MCP conectado + credencial n8n lista. Cuenta STANDARD, USD |
+| Slack | ✅ listo | MCP conectado + credencial n8n lista. Bot en 3 canales |
 | Gmail | ⏳ pendiente | Paso 4 |
 
 ---
@@ -156,6 +156,16 @@ Guardar Mensaje → Obtener Historial → Construir Contexto (Code)
 
 ---
 
+## Canales Slack — IDs (usar IDs en n8n, más robusto que nombres)
+| Canal | ID |
+|---|---|
+| `#todo-urbanstep` | C0ATC9AP675 |
+| `#alertas-ventas` | C0AUCUV2VEU |
+| `#quejas-urgentes` | C0AUCUXV7DW |
+**ATENCIÓN:** El canal es `alertas-ventas` (con s), no `alerta-ventas`.
+
+---
+
 ## Logs de Sesión
 
 ### Log 2026-04-15 (sesión de setup)
@@ -187,6 +197,14 @@ Guardar Mensaje → Obtener Historial → Construir Contexto (Code)
 - Paso 1 implementado via MCP n8n — 6 nodos: Telegram Trigger, Extraer Datos (Set), Buscar Cliente (Supabase GetAll), IF Cliente Existe, Crear Cliente (Supabase Create), Guardar Mensaje (Supabase Create)
 - Prueba exitosa en modo test: cliente y mensaje guardados correctamente en Supabase
 - Próximo paso: activar workflow y agregar Paso 2 (prompt dual OpenAI)
+
+### Log 2026-04-17 (post-clase — setup Paso 4 completo)
+- HubSpot: MCP conectado + credencial agregada en n8n ✅
+- Slack: MCP conectado + credencial agregada en n8n ✅
+- Slack bot agregado a: #todo-urbanstep, #alertas-ventas, #quejas-urgentes
+- IDs de canales verificados via MCP (ver tabla arriba)
+- ATENCIÓN: canal es `alertas-ventas` (con s) — verificar en nodos n8n
+- Pendiente mañana: Paso 3 (Router 6 ramas) + Paso 4 (HubSpot + Slack + Gmail)
 
 ### Log 2026-04-15 (sesión de verificación con Opus 4.6)
 - Lectura completa de ambos PDFs originales (Proyecto integrador 2B + Material Complementario)
