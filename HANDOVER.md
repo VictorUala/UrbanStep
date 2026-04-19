@@ -415,3 +415,119 @@ Telegram Trigger → Extraer Datos → Buscar Cliente → IF Cliente Existe
   - Agregado template de correo para errores de clasificación
 - **HANDOVER.md actualizado** con todas las decisiones de arquitectura completas
 - Próximo paso: diagrama de flujo en Excalidraw (JSON directo)
+
+### Log 2026-04-19 sesión 3 — Router fix + Paso 4 completo + limpieza modelos
+
+**Estado del workflow v2 (SDvniUq2L5axPWWu) — 46 nodos:**
+
+**Paso 4 — Ramas implementadas y cableadas (completo):**
+- Router[0] Queja urgente → Slack Alerta Queja (#quejas-urgentes C0AUCUXV7DW) → Log Queja ✅
+- Router[1] Compra inmediata → Upsert Contacto HubSpot → Crear Deal HubSpot (stage: appointmentscheduled) → Slack Alerta Ventas (#alertas-ventas C0AUCUV2VEU) → Log Compra ✅
+- Router[2] Recurrente → Telegram Fidelizacion → Log Recurrente ✅
+- Router[3] Post-venta → Log Post-venta (sin acción adicional — rama de observación)
+- Router[4] Nurturing → Telegram Promo → Log Nurturing ✅
+- Router[5] Exploratorio → Log Exploratorio (sin acción adicional — rama de observación)
+- Router[6] Fallback → Log Fallback ✅
+
+**Form Trigger (segundo canal de entrada):**
+- Form Trigger → Extraer Datos Form → Buscar Cliente Form → IF Existe Form
+  - TRUE → Guardar Mensaje Form
+  - FALSE → Crear Cliente Form → Guardar Mensaje Form
+  - → Obtener Historial R2 (omite R1, no hay Telegram que responder)
+- Formulario: 7 campos (nombre, email, ciudad, interes_principal, producto_categoria, talle, mensaje_cliente)
+
+**Router Decisiones — BUG CORREGIDO:**
+- Switch v3 tenía bug con operator `boolean.operation: "true"` → crash "Cannot read properties of undefined (reading 'caseSensitive')"
+- Fix: regla r3 reescrita como comparación de strings: `String($json.es_recurrente) === "true"`
+- TODAS las reglas usan string comparison, sin operadores booleanos
+- Fix confirmado en el JSON del workflow
+
+**Modelos GPT 2b Analisis — estado actual:**
+- `gpt-4o Analitico` (OpenRouter): DISABLED — esperando que Victor agregue créditos a OpenRouter
+- `GLM Fallback R2` (OpenRouter z-ai/glm-4.5-air:free): ai_languageModel[1] → actuando como primario temporalmente
+- `Z*ai/glm-4.5` (conectado por Victor en UI): ai_languageModel[0] del Structured Output Parser (para autoFix)
+- **Acción pendiente:** re-habilitar `gpt-4o Analitico` una vez que Victor agregue créditos a OpenRouter
+
+**Modelos AI Agent Conversacional — OK:**
+- `gpt-4o-mini` (OpenAI directo): ai_languageModel[0] ✅
+- `GLM Fallback R1`: ai_languageModel[1] ✅
+
+**Structured Output Parser:**
+- `autoFix: true` + `Z*ai/glm-4.5` conectado como sub-modelo (requerido por autoFix)
+- Victor conectó el GLM en la UI de n8n — fix de sesión anterior
+
+**Schema real de tabla clientes (IMPORTANTE para defensa):**
+La tabla `clientes` en Supabase NO tiene campos `fecha_compra`, `monto`, `producto` como indica CONTEXTO.md.
+Tiene: id, email, nombre, telegram_id, ciudad, canal_origen, historial_compras (array JSON), segmento, created_at.
+Esto significa que `es_recurrente` siempre será `false` en pruebas normales.
+**Para probar rama Recurrente:** insertar manualmente un registro con `historial_compras` no vacío en Supabase,
+o actualizar el nodo Enriquecer Recurrencia para chequear `historial_compras.length > 0`.
+
+**HubSpot — fix aplicado:**
+- `stage: "appointmentscheduled"` debe estar en top-level de parameters, NO dentro de additionalFields
+- Esto fue corregido en la sesión
+
+**Errores conocidos y soluciones:**
+- Switch v3 con boolean operator → usar string comparison siempre
+- HubSpot "Deal Stage Name or ID required" → mover `stage` a nivel raíz del nodo
+- Structured Output Parser "A Model sub-node must be connected" → cuando autoFix:true, conectar modelo GLM al parser
+- addConnection sin sourceType/targetType → defaultea a `main`, no `ai_languageModel` — siempre especificar tipo
+- gpt-4o via OpenRouter "Payment required" → agregar créditos en openrouter.ai
+
+**Próximos pasos críticos:**
+1. ~~Agregar créditos a OpenRouter → re-habilitar `gpt-4o Analitico`~~ ✅ HECHO
+2. ~~Activar workflow v2 en Telegram~~ ✅ HECHO
+3. Limpiar datos de prueba en Supabase (mensajes/conversaciones/logs del cliente test id: 25ae4c46-dcaf-4219-8cd2-fdcdef002e5c)
+4. Probar los 3 casos de defensa: Compra (talle + pago), Queja (producto roto), Recurrente (simular con INSERT manual)
+5. Git commit + push
+6. Documentación 2-3 páginas + Google Drive
+
+---
+
+## Log 2026-04-19 — Sesión 4 (continuación)
+
+**Problema resuelto: email_detectado se perdía en el pipeline**
+
+- Root cause: `Parsear Analisis` no incluía `email_detectado` en su output JSON
+- `Guardar Analisis` guarda en tabla `conversaciones` (sin esa columna) → el campo desaparecía
+- `Enriquecer Recurrencia` leía de `$('Guardar Analisis')` → email siempre null
+- Gmail `sendTo` null → crash "Cannot read properties of null (reading 'split')"
+
+**Fix aplicado (via fix_nodes.js → PUT API n8n):**
+1. `Parsear Analisis`: ahora incluye `email_detectado: analisis.email_detectado || null`
+2. `Enriquecer Recurrencia`: lee `emailDetectado = $('Parsear Analisis').first().json.email_detectado || null` (bypassa Guardar Analisis)
+3. `email = c.email || emailDetectado || null` → prioriza DB, fallback a lo detectado por GPT
+
+**Resultado:** Email de confirmación llega correctamente. CASO 1 - COMPRA INMEDIATA 100% operativo ✅
+- Telegram → GPT extrae email → HubSpot Deal → Gmail confirmación → Slack alerta → Log Supabase
+
+**Sesión 4 continuación — fixes adicionales:**
+
+**Router orden de reglas:** Recurrente subió por encima de Compra (via fix_router_order.js)
+- Antes: Compra(1) → Recurrente(2) → recurrente que quería comprar siempre iba a Compra
+- Después: Recurrente(1) → Compra(2), con condición intencion≠alta en Recurrente
+- Lógica final: recurrente navegando → Fidelizacion | recurrente comprando → HubSpot+Gmail
+
+**AI Agent prompt fixes (via fix_agent_prompt.js):**
+- `{{nombre}}` literal en respuestas: agregado "NUNCA uses placeholders como {{nombre}}" al system prompt
+- Email repetido: `Construir Contexto Conversacional` ahora lee email de `Buscar Cliente` (Supabase) y lo pasa al agent
+- System prompt actualizado: "SI el email ya está registrado, NO vuelvas a pedirlo"
+
+**Telegram Fidelizacion/Promo mensajes (via fix_telegram_messages.js):**
+- Antes: "¡Hola Victor Duart! Gracias por ser cliente..." → suena a bot nuevo interrumpiendo
+- Después: "Por cierto, Victor, como ya compraste con nosotros..." → fluye como continuación natural
+
+**Regla Recurrente (via fix_recurrente_rule.js):**
+- Agregada condición intencion≠alta: recurrente con intención alta va directo a Compra
+
+**Casos de defensa testeados:**
+- ✅ CASO 1 - Compra Inmediata: Telegram → HubSpot Deal → Gmail → Slack → Log
+- ✅ CASO 2 - Queja Urgente: Slack #quejas-urgentes con análisis correcto
+- ✅ CASO 3 - Cliente Recurrente: Fidelizacion cuando navega, Compra cuando compra
+
+**Pendiente para próxima sesión:**
+- Testear rama Nurturing (Caso defensa: cliente que compara precios, objeción precio → Telegram Promo)
+- Testear Formulario Web (Caso defensa: NPS/feedback por form → análisis completo)
+- Post-venta y Exploratorio (solo log, verificar que no crashean)
+- Git commit + push
+- Documentación 2-3 páginas + Google Drive
