@@ -275,6 +275,90 @@ Telegram Trigger → Extraer Datos → Buscar Cliente → IF Cliente Existe
 - ATENCIÓN: canal es `alertas-ventas` (con s) — verificar en nodos n8n
 - Pendiente mañana: Paso 3 (Router 6 ramas) + Paso 4 (HubSpot + Slack + Gmail)
 
+### Log 2026-04-19 (sesión larga — arquitectura paralela + Router + 3 workflows)
+
+**Decisiones arquitectónicas tomadas:**
+- Sistema de 3 workflows en n8n para desarrollo colaborativo:
+  - `UrbanStep` (WystqHlqarqWa4jB) → backup, estado secuencial anterior
+  - `UrbanStep v2` (SDvniUq2L5axPWWu) → **PRINCIPAL** — Claude + ideas filtradas de Grok
+  - `UrbanStep v3 - Grok` (Uama1niOmr310RQr) → playground de Grok puro
+- Git branch `feature/parallel-v2` creado para desarrollo paralelo
+
+**Arquitectura v2 y v3 (idéntica base):**
+```
+Telegram Trigger → Extraer Datos → Buscar Cliente → IF Cliente Existe
+  TRUE/FALSE → Crear Cliente → Guardar Mensaje
+  ↓
+  ├── RAMA 1 (conversacional, paralela):
+  │   Obtener Historial R1 → Construir Contexto Conversacional (Code)
+  │   → AI Agent Conversacional (gpt-4o-mini + GLM fallback, temp 0.7, retryOnFail 3x)
+  │   → Separar Respuesta → Telegram Responder + Guardar Respuesta
+  │
+  └── RAMA 2 (análisis, paralela):
+      Obtener Historial R2 → Construir Prompt Analitico (Code)
+      → GPT 2b Analisis (gpt-4o via OpenRouter + GLM fallback, retryOnFail 3x)
+      → Parsear Analisis → Guardar Analisis
+      → Consultar Recurrencia (Supabase clientes) → Enriquecer Recurrencia (Code)
+      → Router Decisiones (Switch, 6 rutas + fallback)
+      → 7 Log nodes (uno por ruta → tabla logs)
+```
+
+**Router — 6 rutas en orden de prioridad:**
+1. Queja urgente: sentimiento=negativo AND objecion≠ninguna
+2. Compra inmediata: etapa_funnel=decision AND intencion=alta
+3. Recurrente: es_recurrente=true (tiene fecha_compra o monto en clientes)
+4. Post-venta: etapa_funnel=post-venta
+5. Nurturing: etapa_funnel=consideracion
+6. Exploratorio: etapa_funnel=awareness
+7. Fallback default → Log Fallback
+
+**Cambios en AI Agent Conversacional (v2/v3):**
+- Sin TRIGGER_ANALISIS (análisis siempre corre en paralelo)
+- System prompt simplificado: rol puro de calificación
+- Cuando piden catálogo: "Ya avisé al equipo, en unos minutos te llega el catálogo. ¿Tu mail?"
+- Temperature: 0.7 (configurado en nodo gpt-4o-mini)
+
+**GPT 2b Analisis:**
+- Reemplazó el HTTP Request anterior por AI Agent nativo LangChain
+- Modelo: gpt-4o via OpenRouter (primario) + GLM fallback
+- System prompt con 3 few-shot examples, temperatura 0.0
+- retryOnFail: 3x / 5000ms, onError: continueErrorOutput
+
+**Enriquecimiento de recurrencia:**
+- Nodo Consultar Recurrencia: Supabase GetAll en tabla clientes, filtrado por id=cliente_id
+- Nodo Enriquecer Recurrencia (Code): agrega es_recurrente (bool) + producto_previo al JSON
+- es_recurrente = true si tiene fecha_compra o monto > 0
+
+**Logging por rama:**
+- 7 nodos Log (uno por cada salida del Router → tabla logs)
+- Campos: cliente_id, accion_ejecutada, resultado, modelo_usado=switch-router, tokens_consumidos=0
+- PENDIENTE: cuando se agregue Paso 4 (HubSpot/Slack), los logs se mueven DESPUÉS de las acciones
+
+**Colaboración con SuperGrok:**
+- Grok analizó los PDFs y el workflow — aportó ideas válidas y algunas incorrectas
+- Idea correcta adoptada: arquitectura paralela (dos ramas desde Guardar Mensaje)
+- Idea correcta adoptada: enrichment de recurrencia + logging por rama
+- Idea incorrecta descartada: splitInBatches para paralelo (usamos conexiones múltiples nativas)
+- Idea incorrecta descartada: retryOnFail/parser en Switch Router (no llama APIs)
+- Idea incorrecta descartada: agente IA tomando decisiones de routing (Switch determinista es correcto)
+- Dinámica: Victor actúa de puente, Claude filtra las propuestas de Grok antes de implementar
+
+**v1 (WystqHlqarqWa4jB) — cambios antes de crear v2:**
+- AI Agent conversacional con system prompt actualizado (sin catálogo, con handoff a ventas)
+- GPT 2b refactorizado a AI Agent LangChain + gpt-4o via OpenRouter
+- Parsear Análisis corregido: lee $json.output en vez de $json.choices[0].message.content
+- Prueba exitosa: catálogo correcto — "Ya avisé al equipo, ¿me dejás tu mail?"
+
+**Próximos pasos (Paso 4):**
+- Rama "Compra inmediata": HubSpot crear contacto + deal + Slack #alertas-ventas
+- Rama "Queja urgente": Slack #quejas-urgentes + mensaje Telegram al cliente
+- Rama "Nurturing": mensaje Telegram con info/promo
+- Rama "Recurrente": mensaje Telegram de fidelización
+- Rama "Exploratorio": mensaje Telegram liviano
+- Mover logs al final de cada acción (después de HubSpot/Slack)
+- Structured Output Parser en GPT 2b (pendiente de sesión anterior)
+- Activar v2 en Telegram y probar end-to-end
+
 ### Log 2026-04-15 (sesión de verificación con Opus 4.6)
 - Lectura completa de ambos PDFs originales (Proyecto integrador 2B + Material Complementario)
 - Verificación cruzada contra CONTEXTO.md y HANDOVER.md
