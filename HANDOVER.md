@@ -531,3 +531,118 @@ o actualizar el nodo Enriquecer Recurrencia para chequear `historial_compras.len
 - Post-venta y Exploratorio (solo log, verificar que no crashean)
 - Git commit + push
 - Documentación 2-3 páginas + Google Drive
+
+---
+
+## Auditoría Opus 4.6 — 2026-04-19 (hallazgos críticos)
+
+Opus leyó CONTEXTO.md, HANDOVER.md, el workflow completo via MCP y el schema Supabase real.
+Evaluación general: **7/10 — sólido pero con gaps que pueden costar nota.**
+
+### 🔴 P0 — CRÍTICO (fix inmediato antes de la defensa)
+
+**1. Logs guardan `cliente_id: null` y `detalle: {}`**
+- Root cause: los nodos Log leen `$json` pero en ese punto `$json` es la respuesta de Slack/Telegram/HubSpot, no los datos del análisis
+- El evaluador va a abrir Supabase, hacer SELECT * FROM logs y ver todo vacío → trazabilidad rota
+- Fix: todos los nodos Log deben leer de `$('Enriquecer Recurrencia').first().json` en lugar de `$json`
+- Ejemplo para Log Compra:
+  - `cliente_id = {{ $('Enriquecer Recurrencia').first().json.cliente_id }}`
+  - `detalle = {{ JSON.stringify({ prioridad: $('Enriquecer Recurrencia').first().json.prioridad, accion: $('Enriquecer Recurrencia').first().json.accion_recomendada, modelo_usado: 'gpt-4o+gpt-4o-mini', tokens_consumidos: 0 }) }}`
+
+**2. Faltan `modelo_usado` y `tokens_consumidos` en los logs**
+- El PDF los pide explícitamente en trazabilidad
+- La tabla DB no tiene esas columnas — solución: meterlos dentro del campo `detalle` (JSON)
+- Agregar a detalle de TODOS los nodos Log: `modelo_usado: "gpt-4o+gpt-4o-mini"`, `tokens_consumidos: 0`
+
+### 🟡 P1 — Importante (antes de la defensa)
+
+**3. Form Trigger sin confirmación visible**
+- El evaluador envía el formulario y no ve ninguna respuesta
+- Fix: configurar "completion page" en el Form Trigger con mensaje de agradecimiento
+- O agregar nodo Gmail que envíe confirmación al email del formulario
+
+**4. Queja urgente: condición de Router puede fallar en edge cases**
+- Regla actual: `sentimiento=negativo AND objecion≠ninguna`
+- Si GPT clasifica `objecion_principal: "ninguna"` pero `sentimiento: "negativo"`, no va a Queja
+- Considerar simplificar a solo `sentimiento=negativo`
+
+**5. Agregar few-shot example #3 al prompt analítico (exploratorio)**
+- El prompt actual tiene solo 2 ejemplos (compra + queja)
+- Agregar: `Ej3: {"sentimiento":"neutro","intencion":"baja","etapa_funnel":"awareness","objecion_principal":"precio","resumen":"Pregunta precios sin decidir","prioridad":"baja","accion_recomendada":"Enviar info promos vigentes"}`
+
+### 🟢 P2 — Mejoras para nota extra
+
+**6. Tabla `conversaciones` le faltan `seguimiento_enviado` y `fecha_ultimo_mensaje`**
+- El CONTEXTO.md los menciona — no bloqueante pero puede salir en preguntas
+
+**7. `accion_ejecutada` vs `rama` en DB**
+- El PDF pide `accion_ejecutada`, la tabla usa `rama` — es defendible, solo explicarlo
+
+### Estimación de costos (preparada por Opus para la defensa)
+- R1 GPT-4o-mini: ~$11/mes (100 conv/día)
+- R2 GPT-4o: ~$70/mes
+- **Total mixto: ~$81/mes**
+- Solo GPT-4o para todo: ~$140/mes → ahorro del 42% con estrategia mixta
+- Optimización adicional: si R2 solo dispara 1 de cada 3 mensajes → ~$35/mes total
+
+### Roadmap priorizado — próximos 6 días
+
+| Prioridad | Tarea | Esfuerzo |
+|-----------|-------|----------|
+| 🔴 P0 | Fix logs: leer de Enriquecer Recurrencia + agregar modelo_usado | 30 min |
+| 🔴 P0 | Agregar Ej3 exploratorio al prompt analítico | 5 min |
+| 🟡 P1 | Testear Formulario Web + agregar completion page | 20 min |
+| 🟡 P1 | Testear ramas Nurturing y Exploratorio | 15 min |
+| 🟡 P1 | Evaluar simplificar regla Queja a solo sentimiento=negativo | 10 min |
+| 🟢 P2 | Limpiar datos de prueba en Supabase | 5 min |
+| 🟢 P2 | Escribir documento de soporte (2-3 pág) | 1-2 h |
+| 🟢 P2 | Exportar workflow JSON + diagrama Excalidraw | 15 min |
+| 🟢 P2 | Subir todo a Google Drive | 10 min |
+| 🟢 P3 | Ensayo general: correr 3 casos de punta a punta | 30 min |
+| 🟢 P3 | Preparar explicación oral de costos API | 15 min |
+
+---
+
+## Log 2026-04-19 — Sesión 5 (fixes post-Opus + Webhook testing)
+
+**Fixes aplicados en base al análisis de Opus:**
+
+**1. fix_logs.js — RESUELTO ✅**
+- Todos los nodos Log (7) ahora leen `cliente_id` y `detalle` desde `$('Enriquecer Recurrencia').first().json`
+- `detalle` incluye `modelo_usado: "gpt-4o+gpt-4o-mini"` y `tokens_consumidos: 0`
+- Verificado: logs en Supabase ya muestran cliente_id real y detalle con datos
+
+**2. Webhook Test Trigger — IMPLEMENTADO ✅**
+- Nodo Webhook agregado al workflow en posición [240, 620]
+- Path: `urbanstep-test`
+- URL: `https://primary-production-3de5.up.railway.app/webhook/urbanstep-test`
+- Nodo `Extraer Datos Webhook` normaliza el payload al mismo formato que `Extraer Datos`
+- Conectado: Webhook → Extraer Datos Webhook → Buscar Cliente (misma ruta que Telegram)
+- `Crear Cliente` y `Guardar Mensaje` actualizados para soportar ambas rutas con `.isExecuted` check
+- `Construir Contexto Conversacional` actualizado para leer de cualquiera de los dos nodos fuente
+- `retryOnFail: false` en AI Agent Conversacional y GPT 2b Analisis (para testing rápido)
+- Modo: `onReceived` (async) — responde instantáneamente, ejecuta en ~15-20s
+
+**Payload de test:**
+```json
+{
+  "telegram_id": "XXXX",    ← distinto para cada cliente ficticio
+  "nombre": "Nombre Cliente",
+  "texto_mensaje": "mensaje del cliente"
+}
+```
+
+**Nota importante para Opus:** el Telegram Responder falla (no hay chat real) pero con `continueOnFail` el flujo continúa. Solo R2 (análisis + Router + acciones) está plenamente verificable por webhook.
+
+**Pendiente antes de la defensa (reactivar para producción):**
+- `retryOnFail: true` en AI Agent Conversacional y GPT 2b Analisis
+- Verificar que Telegram Trigger sigue activo y respondiendo mensajes reales
+
+**Estado del Roadmap post-Opus:**
+- ✅ P0: Logs con cliente_id + detalle + modelo_usado
+- ✅ P0: Webhook para testing automatizado
+- ⬜ P1: Form Trigger — completion page + test completo
+- ⬜ P1: Simplificar regla Queja a solo sentimiento=negativo
+- ⬜ P1: Few-shot example #3 (exploratorio) al prompt analítico
+- ⬜ P2: Documento de soporte 2-3 páginas
+- ⬜ P2: Exportar JSON + diagrama Excalidraw + Google Drive
