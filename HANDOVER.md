@@ -198,6 +198,75 @@ Guardar Mensaje → Obtener Historial → Construir Contexto (Code)
 - Prueba exitosa en modo test: cliente y mensaje guardados correctamente en Supabase
 - Próximo paso: activar workflow y agregar Paso 2 (prompt dual OpenAI)
 
+### Log 2026-04-18 (sesión larga — refactor Paso 2 + primeras pruebas exitosas)
+
+**Infraestructura:**
+- Gmail MCP conectado (create_draft, search_threads, etc.)
+- Google Drive MCP conectado (search, read, download)
+- Google Calendar MCP conectado
+- Google Sheets MCP conectado (service account: sheetsn8n@railway-493619.iam.gserviceaccount.com)
+- Nota: Sheets MCP usa service account, NO puede crear archivos. Crear sheet vacío manualmente y compartir con la service account. De ahí en adelante Claude puede leer/escribir todo.
+- Supabase MCP reconectado (token vencido, refrescado via /mcp → authenticate)
+
+**Estándar de robustez del profesor (Tech Lead MeLi):**
+- 6 capas: JSON Schema + autoFix → modelo autofix → fallback model → retryOnFail (3x/5000ms) → continueErrorOutput → error log
+- Preferir nodos LangChain (agnósticos) sobre nodos nativos de proveedor
+- OpenRouter como abstracción para múltiples modelos con una credencial
+- `outputParserStructured` con `schemaType: manual` + `autoFix: true`
+- Generar JSON Schema con Gemini/ChatGPT para no escribirlo a mano
+- Error log al final de TODAS las ramas — el flujo nunca termina sin registrar
+
+**Refactor Paso 2 — arquitectura nueva:**
+Reemplazamos HTTP Requests por nodo Agent nativo LangChain:
+- AI Agent (`@n8n/n8n-nodes-langchain.agent` v3.1)
+  - Primary: GPT-4o-mini (lmChatOpenAi, "OpenAi account")
+  - Fallback: Z-ai/glm-4.5 (OpenRouter)
+  - retryOnFail: true, maxTries: 3, waitBetweenTries: 5000
+  - onError: continueErrorOutput
+  - needsFallback: true
+- Nodo "Separar Respuesta" (Code): separa respuesta del cliente del flag TRIGGER_ANALISIS
+  - Regex: `/TRIGGER_ANALISIS:\s*(SI|NO)/i`
+  - Limpia "Asistente:" prefix
+  - Output: `{ respuesta, trigger (bool), cliente_id, chat_id }`
+- Nodo "Telegram Responder": parse_mode: None (evita error con emojis/markdown), appendAttribution: false
+- Nodo "IF Disparar Análisis": lee `trigger === true` → SI va a GPT 2b, NO termina
+
+**System prompt del Agent conversacional:**
+- Sos asistente de UrbanStep (calzado premium argentino)
+- Español rioplatense, amigable y profesional
+- Al final de cada respuesta: `TRIGGER_ANALISIS:SI` o `TRIGGER_ANALISIS:NO`
+- SI si: producto específico, precio, talle, stock, envío o queja
+- NO si: saludo, pregunta genérica, charla trivial
+
+**Sesión/historial:**
+- Filtrar mensajes por sesión (sugerido: últimas 4-6 horas) — pendiente implementar en Construir Contexto
+- Actualmente toma últimos 10 mensajes sin filtro de tiempo
+
+**Estado de pruebas del Paso 2:**
+- ✅ AI Agent responde en español rioplatense correctamente
+- ✅ Memoria conversacional funciona (lee historial de Supabase)
+- ✅ TRIGGER_ANALISIS:SI detectado cuando cliente menciona talle/producto
+- ✅ TRIGGER_ANALISIS:NO para saludos triviales
+- ✅ Telegram recibe respuesta limpia (sin TRIGGER, sin prefijo de rol)
+- ✅ Guardar Respuesta Asistente guarda en Supabase correctamente
+- ⏳ Pendiente: verificar que IF → GPT 2b funcione end-to-end
+- ⏳ Pendiente: GPT 2b sigue siendo HTTP Request — refactorizar a Agent + Structured Output Parser
+- ⏳ Pendiente: filtro de sesión por horas en Construir Contexto
+- ⏳ Pendiente: nodos de error log
+
+**Workflow UrbanStep — 18 nodos actuales:**
+```
+Telegram Trigger → Extraer Datos → Buscar Cliente → IF Cliente Existe
+  TRUE → Guardar Mensaje
+  FALSE → Crear Cliente → Guardar Mensaje
+  → Obtener Historial → Construir Contexto → AI Agent
+  → Separar Respuesta ─┬→ Telegram Responder
+                        ├→ Guardar Respuesta Asistente
+                        └→ IF Disparar Análisis
+                               TRUE → GPT 2b (HTTP) → Parsear → Guardar Análisis
+                               FALSE → fin
+```
+
 ### Log 2026-04-17 (post-clase — setup Paso 4 completo)
 - HubSpot: MCP conectado + credencial agregada en n8n ✅
 - Slack: MCP conectado + credencial agregada en n8n ✅

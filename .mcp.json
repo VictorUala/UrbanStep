@@ -3,6 +3,40 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=wigpybyzjwtjiixnfymf"
+    },
+    "hubspot": {
+      "type": "http",
+      "url": "https://mcp.hubspot.com/",
+      "oauth": {
+        "clientId": "68f52f01-90b7-4a52-8dcc-256eb6e31d1d",
+        "callbackPort": 8080
+      }
+    },
+    "slack": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "--quiet",
+        "@modelcontextprotocol/server-slack"
+      ],
+      "env": {
+        "SLACK_BOT_TOKEN": "xoxb-10936701243490-10930404445523-muaZEa9I3dnT3gkiSh0wpUGD",
+        "SLACK_TEAM_ID": "T0ATJLM75EE",
+        "LOG_LEVEL": "error",
+        "NPM_CONFIG_LOGLEVEL": "silent"
+      }
+    },
+    "mcp-gsheets": {
+      "command": "node",
+      "args": [
+        "Z:/UrbanStep_Henry/node_modules/mcp-gsheets/dist/index.js"
+      ],
+      "env": {
+        "GOOGLE_PROJECT_ID": "railway-493619",
+        "GOOGLE_APPLICATION_CREDENTIALS": "Z:/UrbanStep_Henry/googlesheets.json",
+        "LOG_LEVEL": "error",
+        "NODE_ENV": "production"
+      }
     }
   }
 }
