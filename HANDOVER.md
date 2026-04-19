@@ -359,6 +359,44 @@ Telegram Trigger → Extraer Datos → Buscar Cliente → IF Cliente Existe
 - Structured Output Parser en GPT 2b (pendiente de sesión anterior)
 - Activar v2 en Telegram y probar end-to-end
 
+### Log 2026-04-19 sesión 2 — Grok collaboration + Paso 4 arrancado
+
+**Colaboración con SuperGrok — análisis de sugerencias:**
+- Grok revisó el JSON de v2 y mandó 4 piezas. Dictamen:
+  - Pieza 1 (JSON Schema Parser): ✅ adoptada en v2 y v3
+  - Pieza 2 (Logging genérico): ✅ adoptada con corrección de columnas reales (rama/estado/detalle)
+  - Pieza 3 (LLM como router): ❌ descartada — Switch determinista es correcto, LLM para routing = latencia + costo + no-determinismo
+  - Pieza 4 (accion_recomendada en Switch): ❌ v2, ✅ v3 fiel
+- Dinámica Grok: propone cosas repetidas (Log Error Rama 1 ya implementado) y formatos con bugs (fallbackOutput: "fallback-sin-ruta" es inválido)
+- Regla operativa: siempre filtrar antes de implementar
+
+**Cambios aplicados en v2 (SDvniUq2L5axPWWu) — 37 nodos:**
+- Structured Output Parser agregado y conectado via ai_outputParser a GPT 2b Analisis (autoFix: true)
+- Parsear Analisis simplificado: ya no hace JSON.parse, lee $json.output directo (objeto ya parseado)
+- 7 Log nodes corregidos: ahora usan columnas reales (rama, estado, workflow_id, detalle JSON)
+- Log Error Conversacional: conectado a salida de error (main[1]) del AI Agent Conversacional
+- Enriquecer Recurrencia: ahora expone nombre, email, telegram_id, fecha_ultima_compra, canal_venta_previo, monto_previo
+- Supabase logs table: columna error_message agregada via migration DDL
+
+**Paso 4 — Ramas implementadas en v2:**
+- Compra inmediata: Router(1) → Upsert Contacto HubSpot (email fallback: telegram_id@telegram.urbanstep.com) → Crear Deal HubSpot (stage: appointmentscheduled) → Slack Alerta Ventas (#alertas-ventas C0AUCUV2VEU) → Log Compra
+- Queja urgente: Router(0) → Slack Alerta Queja (#quejas-urgentes C0AUCUXV7DW) → Log Queja
+- HubSpot typeVersion: 2.2, operation: upsert para contacto, create para deal
+- Slack typeVersion: 2.4, operation: send, channelId via __rl mode: id
+- PENDIENTE: seleccionar credenciales HubSpot y Slack en UI de n8n (no se puede via MCP)
+
+**Cambios aplicados en v3 (Uama1niOmr310RQr) — 33 nodos:**
+- Mismos cambios que v2 (Parser, Log nodes corregidos, Log Error Rama 1, Enriquecer Recurrencia mejorado)
+- Diferencias Grok-específicas: compras_previas_count en Enriquecer, accion_recomendada como condición OR en Compra del Router
+- Paso 4 NO implementado en v3 (pendiente que Grok lo haga en su rama)
+
+**Próximos pasos:**
+- Linkear credenciales HubSpot y Slack en UI de n8n (v2)
+- Implementar Nurturing (Telegram mensaje promo) y Recurrente (Telegram fidelización)
+- Probar end-to-end: caso Compra, caso Queja, caso Recurrente
+- Activar v2 en Telegram
+- Documentación final + Google Drive
+
 ### Log 2026-04-15 (sesión de verificación con Opus 4.6)
 - Lectura completa de ambos PDFs originales (Proyecto integrador 2B + Material Complementario)
 - Verificación cruzada contra CONTEXTO.md y HANDOVER.md
