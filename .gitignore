@@ -4,6 +4,13 @@
 secrets.*
 *.key
 *.pem
+.mcp.json
+googlesheets.json
+
+# Node
+node_modules/
+package-lock.json
+package.json
 
 # n8n exports con credenciales
 *credentials*

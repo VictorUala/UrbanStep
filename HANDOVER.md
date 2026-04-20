@@ -641,8 +641,72 @@ Evaluación general: **7/10 — sólido pero con gaps que pueden costar nota.**
 **Estado del Roadmap post-Opus:**
 - ✅ P0: Logs con cliente_id + detalle + modelo_usado
 - ✅ P0: Webhook para testing automatizado
-- ⬜ P1: Form Trigger — completion page + test completo
-- ⬜ P1: Simplificar regla Queja a solo sentimiento=negativo
-- ⬜ P1: Few-shot example #3 (exploratorio) al prompt analítico
+- ✅ P1: Form Trigger — completion page agregada
+- ✅ P1: Regla Queja refinada: sentimiento=negativo AND prioridad=alta
+- ✅ P1: Few-shot examples reemplazados con formato rico (contexto conversacional + JSON)
 - ⬜ P2: Documento de soporte 2-3 páginas
 - ⬜ P2: Exportar JSON + diagrama Excalidraw + Google Drive
+
+---
+
+## Log 2026-04-19 — Sesión 6 (Opus testing masivo + Grok review)
+
+**Testing masivo via Webhook (Opus):**
+- 20+ ejecuciones via webhook automatizado
+- Bug encontrado y corregido: `$json.body.telegram_id` (webhook pone datos en `body`, no en root)
+- 15 clientes ficticios creados con nombres argentinos realistas
+- 3 clientes con historial_compras (recurrentes): Carolina Vega, Diego Peralta, Sofia Romero
+
+**Resultados del testing por rama:**
+| Rama | Tests | Resultado |
+|------|-------|-----------|
+| compra-inmediata | 3/3 ✅ | Lucia, Facundo, Camila |
+| queja-urgente | 3/3 ✅ | Roberto, Valentina, Martin |
+| nurturing-consideracion | 3/3 ✅ | Nicolas, Florencia, Agustina 2 |
+| exploratorio-awareness | 3/3 ✅ | Joaquin, Milagros 2, Andrea |
+| recurrente-fidelizacion | 2/3 ✅ | Carolina, Sofia (Diego falló por GPT rate limit) |
+| post-venta | 1/1 ✅ | Pablo Mendez |
+| error-analisis | 1/1 ✅ | Log Error Analisis nuevo captura errores GPT |
+
+**Bugs encontrados y corregidos por Opus:**
+1. Webhook body path: `$json.telegram_id` → `$json.body.telegram_id`
+2. Regla Queja demasiado agresiva: sentimiento=negativo solo → ahora sentimiento=negativo AND prioridad=alta
+3. Log Error Analisis: nuevo nodo conectado a GPT 2b error output (main[1])
+4. continueOnFail agregado a Telegram Fidelizacion, Telegram Promo, Gmail, HubSpot
+
+**Problema detectado: Agustina Molina (5007) misrouting**
+- Mensaje: "Estoy comparando precios con otras marcas, más caras..."
+- GPT clasificó sentimiento=negativo → fue a Queja (incorrecto)
+- Fix: regla Queja ahora requiere prioridad=alta además de sentimiento=negativo
+- Verificado: Agustina 2 (5018) va correctamente a nurturing
+
+**Review de Grok — cambios adoptados:**
+1. ✅ Webhook deshabilitado para defensa (nodos greyed-out, reactivables)
+2. ✅ `email_detectado` columna agregada a tabla `conversaciones` + Guardar Analisis lo escribe
+3. ✅ Few-shot examples reemplazados con formato rico de Grok (Conversación + Output JSON)
+4. ❌ Descartado: historial_compras "no existe" → sí existe (Grok comparó contra PDF, no contra schema real)
+5. ❌ Descartado: ahorro 97% → cálculo incorrecto de Grok
+
+**Prompt analítico final (GPT 2b):**
+- 3 few-shot examples con formato "Conversación: ... Output: {JSON}"
+- Incluye email_detectado en schema y en examples
+- Campos obligatorios validados por Structured Output Parser con autoFix
+
+**Base de datos final:**
+- 21 clientes (20 ficticios + Victor Duart)
+- 54 mensajes (entrada + salida)
+- 20 conversaciones (análisis JSON)
+- 18 logs con trazabilidad completa (cliente_id, rama, detalle con modelo_usado)
+
+**Test final Telegram en vivo:**
+- Victor probó compra de "UrbanStep Max talle 46"
+- Bot recordó email sin pedirlo, usó nombre real, confirmó talle, cerró venta
+- Flujo impecable post few-shot upgrade ✅
+
+**Pendiente para próxima sesión:**
+- Reactivar retryOnFail en AI Agents antes de defensa
+- Reactivar webhook si se necesita más testing
+- Documento de soporte 2-3 páginas
+- Exportar JSON + diagrama + Google Drive
+- Ensayo general de los 3 casos de defensa
+- Testear Form Trigger end-to-end
