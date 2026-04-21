@@ -706,7 +706,72 @@ Evaluación general: **7/10 — sólido pero con gaps que pueden costar nota.**
 **Pendiente para próxima sesión:**
 - Reactivar retryOnFail en AI Agents antes de defensa
 - Reactivar webhook si se necesita más testing
+- Reactivar Telegram Fidelizacion y Telegram Promo (deshabilitados para testing)
 - Documento de soporte 2-3 páginas
 - Exportar JSON + diagrama + Google Drive
 - Ensayo general de los 3 casos de defensa
 - Testear Form Trigger end-to-end
+- Conectar TRIGGER_ANALISIS para que R2 solo corra cuando vale la pena
+- Actualizar prompt de GPT-4o (GPT 2b Analisis) con contexto enriquecido
+
+---
+
+## Log 2026-04-20/21 — Sesión 7 (Prompt engineering profundo)
+
+**Rediseño completo del prompt del AI Agent Conversacional (con Victor, pensamiento conjunto)**
+
+Victor analizó el flujo nodo por nodo y detectó problemas arquitectónicos fundamentales:
+
+**1. Cambio de rol: "asistente virtual" → "agente calificador de leads"**
+- Root cause de las alucinaciones (precios, promos, stock inventados)
+- Al ser "asistente" el modelo quería ayudar → inventaba información
+- Como "calificador" su trabajo es escuchar, clasificar y derivar → no necesita inventar
+
+**2. Sesiones agrupadas por handoff (no por timestamp)**
+- El nodo Code agrupa mensajes en sesiones separadas por frases de handoff
+- Una sesión empieza cuando el cliente habla después de un handoff
+- Termina con otro handoff ("te van a contactar", "¿necesitás algo más?")
+- Resuelve el problema de chats que cruzan la medianoche
+
+**3. Flag OUTDATED calculado en Code (costo $0)**
+- Si pasaron más de 24 horas desde el último mensaje → outdated=true
+- El agent pregunta "¿seguís interesado o es algo nuevo?"
+- Verificado funcionando en test real ✅
+
+**4. TRIGGER_ANALISIS reintroducido**
+- R2 (GPT-4o) solo debería correr cuando TRIGGER=SI
+- SI: cliente confirmó datos, se despidió, expresó intención clara
+- NO: saludos, respuestas cortas, esperando respuesta
+- Pendiente: reconectar para que R2 sea condicional (ahora sigue en paralelo)
+
+**5. TEMA para clasificar contexto de queja**
+- nuevo / queja_persistente / compra_con_queja_activa
+- Separar Respuesta extrae TRIGGER y TEMA del output del agent
+
+**6. Detección de queja activa en Code (costo $0)**
+- El Code busca palabras clave negativas en sesiones cerradas
+- Pasa quejaActiva=true/false al agent
+
+**7. Historial de compras en contexto**
+- El Code lee historial_compras de la tabla clientes
+- Lo formatea como texto para el agent
+- El agent sabe qué compró antes sin preguntar
+
+**Bugs de prompt resueltos:**
+- ✅ No re-saluda en medio de una charla (regla 9)
+- ✅ No inventa precios/promos/stock/colores (regla 10 + cambio de rol)
+- ✅ Cierra sin loop — "¿necesitás algo más?" → "No" → despedida final
+- ✅ Después de handoff saluda como sesión nueva sin referenciar temas anteriores
+- ✅ Recuerda email sin pedirlo de nuevo
+
+**Test final completo (2 sesiones consecutivas):**
+- Sesión 1: "Hola → Zapatillas Fury talle 46 → email → handoff → No → Cerró" ✅
+- Sesión 2: "Hola de nuevo → Lanza cohetes furtivo (test absurdo) → talle 43 → recordó email → handoff → No → Cerró" ✅
+
+**Nodos temporalmente deshabilitados para testing:**
+- Webhook Test Trigger + Extraer Datos Webhook (disabled)
+- Telegram Fidelizacion (disabled)
+- Telegram Promo (disabled)
+
+**Prompt completo del agent está en el workflow, nodo AI Agent Conversacional.**
+Estructura: REGLAS ABSOLUTAS → DATOS → RAZONAMIENTO (4 pasos) → ROL → CIERRE → SEÑALES
