@@ -1,0 +1,1157 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 4
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -320,
+        224
+      ],
+      "id": "903c6ebb-53aa-4e87-980a-4cc8211b1270",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g",
+          "mode": "list",
+          "cachedResultName": "Rutas Logistica M2C4",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Rutas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -80,
+        224
+      ],
+      "id": "c88921c2-638e-4ec6-9a6c-c6eb09853a0a",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0CExkrSJJRrhdAF7",
+          "name": "Sheets gobeamariano@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        224
+      ],
+      "id": "77e4e195-9e90-4bae-84f0-f9407a2b4e19",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C09RBBJ4T8U",
+          "mode": "id"
+        },
+        "text": "Terminaste de armar todas las rutas del día!!! ",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        976,
+        0
+      ],
+      "id": "3f6bc492-bfac-4681-aff3-bae8b865f8fe",
+      "name": "Send a message",
+      "webhookId": "2a7ea3d7-a132-45b0-833b-ec4d29af3079",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "o26gZ4Sx9UhiiEVT",
+          "name": "Slack Henry Dummy"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json }}",
+        "hasOutputParser": true,
+        "needsFallback": true,
+        "options": {
+          "systemMessage": "System Prompt: AI Logistics Supervisor Agent\nEres un Supervisor Digital de Logística experto en análisis de riesgos en tiempo real y toma de decisiones proactivas para la gestión de entregas. Tu objetivo es evaluar cada entrega del día utilizando datos externos y determinar si existe un riesgo que requiera intervención humana.\n1. Análisis de Riesgos (Criterios de Evaluación)\nPara cada entrega procesada, debes analizar dos fuentes de datos y aplicar los siguientes criterios:\nRiesgo Climático:\nFuente: API Open-Meteo.\n\n\nLógica: Extrae el valor máximo del array precipitation_probability.\n\n\nUmbral: Si el valor máximo es > 50%, se clasifica como Riesgo Alto (Clima).\n\n\nRiesgo de Tráfico:\nFuente: API de tráfico (httpbin.org/json).\n\n\nLógica: Interpreta la respuesta JSON basada en la cantidad de slides y metadatos disponibles para asignar un score de 0 a 100.\n\n\nUmbral: Si el score es > 50%, se clasifica como Riesgo Alto (Tráfico).\n2. Toma de Decisiones y Acciones\nBasándote en los riesgos detectados, debes definir una decision siguiendo estas reglas:\nRiesgo Alto (> 50% en clima o tráfico):\nAcción: Generar una notificación automática al operador responsable y sugerir una ruta alternativa.\nEstado Final: \"Riesgo alto\".\n\n\nRiesgo Bajo (Ambos ≤ 50%):\nAcción: \"Sin acción\".\n\n\nEstado Final: \"Normal\".\n\n\n3. Protocolo de Manejo de Errores (Fallback)\nSi encuentras errores técnicos durante la consulta de las APIs (Timeouts, Error 500, o Error 400 por coordenadas inválidas), debes activar inmediatamente la Ruta de Emergencia:\n\nEstado Final: \"Revisión prioritaria\".\n\n\nAcción: Notificar al supervisor: \"Entrega {{ID}} no pudo ser evaluada automáticamente. Revisión necesaria.\".\n\n\nMotivo del Error: Especificar si fue un Timeout, Error 500 o Coordenadas inválidas.\n\n\n4. Estructura de Salida Obligatoria\nDebes devolver siempre un objeto JSON estructurado con los siguientes campos para ser guardado en el registro final:\n\nCampo\nDescripción\nID\nID de la entrega procesada.\nCiudad\nCiudad de destino.\nRiesgo Clima (%)\nValor máximo de probabilidad de precipitación encontrado.\nRiesgo Tráfico (%)\nScore interpretado (0-100).\nAcción\nDescripción de la medida tomada o sugerencia de ruta.\nEstado final\n\"Normal\", \"Riesgo alto\" o \"Revisión prioritaria\".\nTimestamp\nFecha y hora de la ejecución (YYYY-MM-DD HH:mm).\n\nInstrucción de Control\nActúa con autonomía basada en los datos contextuales provistos. No inventes datos de clima si la API falla; en su lugar, dispara el protocolo de Fallback."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        832,
+        224
+      ],
+      "id": "0f2aa775-b781-4305-82f3-a1bf94ed5bfa",
+      "name": "AI Agent",
+      "retryOnFail": true,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `Latitute value in float format`, 'string') }}"
+            },
+            {
+              "name": "longitude",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `Longitude value in float format`, 'string') }}"
+            },
+            {
+              "name": "hourly",
+              "value": "precipitation_probability"
+            },
+            {
+              "name": "forecast_days",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        928,
+        448
+      ],
+      "id": "e9e903d7-f9e9-493b-b5d4-c3f045c65889",
+      "name": "API de Clima"
+    },
+    {
+      "parameters": {
+        "url": "https://httpbin.org/json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.4,
+      "position": [
+        1056,
+        448
+      ],
+      "id": "1b642259-7a0e-40ae-95b8-df769d343f4f",
+      "name": "API de Trafico"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"title\": \"LogisticsSupervisionOutput\",\n  \"description\": \"Esquema para el registro de decisiones y análisis de riesgo logístico.\",\n  \"type\": \"object\",\n  \"required\": [\n    \"ID\",\n    \"Ciudad\",\n    \"Acción\",\n    \"Estado final\",\n    \"Timestamp\"\n  ],\n  \"properties\": {\n    \"ID\": {\n      \"type\": \"integer\",\n      \"description\": \"Identificador único de la entrega.\"\n    },\n    \"Ciudad\": {\n      \"type\": \"string\",\n      \"description\": \"Nombre de la ciudad o zona de destino.\"\n    },\n    \"Riesgo Clima (%)\": {\n      \"oneOf\": [\n        { \"type\": \"number\", \"minimum\": 0, \"maximum\": 100 },\n        { \"type\": \"string\", \"description\": \"Usado para indicar error o no disponible, e.g., '—'\" },\n        { \"type\": \"null\" }\n      ],\n      \"description\": \"Probabilidad máxima de precipitación detectada.\"\n    },\n    \"Riesgo Tráfico (%)\": {\n      \"oneOf\": [\n        { \"type\": \"number\", \"minimum\": 0, \"maximum\": 100 },\n        { \"type\": \"string\", \"description\": \"Usado para indicar error o no disponible, e.g., '—'\" },\n        { \"type\": \"null\" }\n      ],\n      \"description\": \"Puntaje de tráfico interpretado basado en la API.\"\n    },\n    \"Acción\": {\n      \"type\": \"string\",\n      \"description\": \"Descripción detallada de la acción tomada: notificación, sugerencia de ruta o sin acción.\"\n    },\n    \"Estado final\": {\n      \"type\": \"string\",\n      \"enum\": [\"Normal\", \"Riesgo alto\", \"Revisión prioritaria\"],\n      \"description\": \"Estado final de la entrega tras el análisis o error de sistema.\"\n    },\n    \"Timestamp\": {\n      \"type\": \"string\",\n      \"format\": \"date-time\",\n      \"description\": \"Fecha y hora de la ejecución en formato ISO 8601 o YYYY-MM-DD HH:mm.\"\n    }\n  }\n}",
+        "autoFix": true
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1184,
+        448
+      ],
+      "id": "58f92a06-665d-4439-9cc2-59df63a49c5f",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "model": "z-ai/glm-4.5-air:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        800,
+        448
+      ],
+      "id": "b4ae0bac-a0ed-48da-8769-13f462c01591",
+      "name": "Z GLM 4.5",
+      "credentials": {
+        "openRouterApi": {
+          "id": "xZpAyjDIWgQms8rD",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output[\"Estado final\"].toLowerCase() }}",
+                    "rightValue": "riesgo alto",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ba7e2209-312f-4cff-a215-67b18e6ef50a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "riesgo_alto"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5a8a111a-a288-4f0e-acb6-c05d5b53dd72",
+                    "leftValue": "={{ $json.output[\"Estado final\"].toLowerCase() }}",
+                    "rightValue": "normal",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "normal"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "02690c7f-3592-47e0-851a-1a73954f71b5",
+                    "leftValue": "={{ $json.output[\"Estado final\"].toLowerCase() }}",
+                    "rightValue": "revisión prioritaria",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "revision_prioritaria"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1552,
+        208
+      ],
+      "id": "5f94242a-c8c7-4707-a212-42adfe5639d2",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0ATS8KRN80",
+          "mode": "id"
+        },
+        "text": "=En la ruta {{ $json.output.ID }} con destino a {{ $json.output.Ciudad }} hemos identificado un {{ $json.output['Estado final'] }} donde el Riesgo Clima es de % y el Riesgo Tráfico es del {{ $json.output['Riesgo Tráfico (%)'] }}.\n\nElaborá una ruta alternativa para este transportista. ",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1776,
+        32
+      ],
+      "id": "b614630e-f2cb-4c5e-a11d-54c5254136de",
+      "name": "Send a message1",
+      "webhookId": "15e1469a-617c-439d-b4d2-b7e696c714e3",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "o26gZ4Sx9UhiiEVT",
+          "name": "Slack Henry Dummy"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g",
+          "mode": "list",
+          "cachedResultName": "Rutas Logistica M2C4",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Rutas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $('AI Agent').item.json.output.ID }}",
+            "Recalcular Ruta": "true",
+            "Riesgo Clima": "={{ $('AI Agent').item.json.output[\"Riesgo Clima (%)\"] }}",
+            "Riesgo Trafico": "={{ $('AI Agent').item.json.output[\"Riesgo Tráfico (%)\"] }}",
+            "Estado Final": "={{ $('AI Agent').item.json.output[\"Estado final\"] }}",
+            "Timestamp": "={{ $('AI Agent').item.json.output.Timestamp }}"
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Ciudad",
+              "displayName": "Ciudad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Dirección",
+              "displayName": "Dirección",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Hora programada",
+              "displayName": "Hora programada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Operador",
+              "displayName": "Operador",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Lat",
+              "displayName": "Lat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Lon",
+              "displayName": "Lon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Recalcular Ruta",
+              "displayName": "Recalcular Ruta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Riesgo Clima",
+              "displayName": "Riesgo Clima",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Riesgo Trafico",
+              "displayName": "Riesgo Trafico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado Final",
+              "displayName": "Estado Final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2000,
+        32
+      ],
+      "id": "2bb60d32-4388-427f-8f7f-6e216ada560e",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0CExkrSJJRrhdAF7",
+          "name": "Sheets gobeamariano@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g",
+          "mode": "list",
+          "cachedResultName": "Rutas Logistica M2C4",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Rutas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $('AI Agent').item.json.output.ID }}",
+            "Recalcular Ruta": "false",
+            "Riesgo Clima": "={{ $('AI Agent').item.json.output[\"Riesgo Clima (%)\"] }}",
+            "Riesgo Trafico": "={{ $('AI Agent').item.json.output[\"Riesgo Tráfico (%)\"] }}",
+            "Estado Final": "={{ $('AI Agent').item.json.output[\"Estado final\"] }}",
+            "Timestamp": "={{ $('AI Agent').item.json.output.Timestamp }}"
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Ciudad",
+              "displayName": "Ciudad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Dirección",
+              "displayName": "Dirección",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Hora programada",
+              "displayName": "Hora programada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Operador",
+              "displayName": "Operador",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Lat",
+              "displayName": "Lat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Lon",
+              "displayName": "Lon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Recalcular Ruta",
+              "displayName": "Recalcular Ruta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Riesgo Clima",
+              "displayName": "Riesgo Clima",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Riesgo Trafico",
+              "displayName": "Riesgo Trafico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado Final",
+              "displayName": "Estado Final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2000,
+        224
+      ],
+      "id": "b8b87fd9-522e-4316-8530-69ce49f8782a",
+      "name": "Update row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0CExkrSJJRrhdAF7",
+          "name": "Sheets gobeamariano@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g",
+          "mode": "list",
+          "cachedResultName": "Rutas Logistica M2C4",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Rutas",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1fr-DWqSnKVoVCQP9Uj14wsX-phsgvMKN2VWhZQ9-s9g/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ID": "={{ $('AI Agent').item.json.output.ID }}",
+            "Recalcular Ruta": "false",
+            "Riesgo Clima": "=Fallo API",
+            "Riesgo Trafico": "=Fallo API",
+            "Estado Final": "={{ $('AI Agent').item.json.output[\"Estado final\"] }}",
+            "Timestamp": "={{ $('AI Agent').item.json.output.Timestamp }}"
+          },
+          "matchingColumns": [
+            "ID"
+          ],
+          "schema": [
+            {
+              "id": "ID",
+              "displayName": "ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Ciudad",
+              "displayName": "Ciudad",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Dirección",
+              "displayName": "Dirección",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Hora programada",
+              "displayName": "Hora programada",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Operador",
+              "displayName": "Operador",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Lat",
+              "displayName": "Lat",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Lon",
+              "displayName": "Lon",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Recalcular Ruta",
+              "displayName": "Recalcular Ruta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Riesgo Clima",
+              "displayName": "Riesgo Clima",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Riesgo Trafico",
+              "displayName": "Riesgo Trafico",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Estado Final",
+              "displayName": "Estado Final",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2000,
+        432
+      ],
+      "id": "64c9e633-bfdb-4ae3-a0c6-4e14d3a13313",
+      "name": "Update row in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "0CExkrSJJRrhdAF7",
+          "name": "Sheets gobeamariano@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2224,
+        304
+      ],
+      "id": "a9f33ba8-88f1-4014-a68a-84b1459fc88c",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3-flash-preview",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        672,
+        448
+      ],
+      "id": "c8b76ec9-69cf-4993-b3f0-98d1184901fc",
+      "name": "Gemini 3 Flash Preview",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "OD88yay032b6k7Hu",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b857d6f5-bcb5-44aa-8c04-fc84d1f7012a",
+              "name": "Lat",
+              "value": "={{ $json.Lat / 10000}}",
+              "type": "number"
+            },
+            {
+              "id": "3e9386c9-bf98-4737-aa6b-7a8aeb6f397f",
+              "name": "Lon",
+              "value": "={{ $json.Lon / 10000}}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        160,
+        224
+      ],
+      "id": "5ad9fbf4-0cfd-4af7-b120-34da4237acdc",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "model": "arcee-ai/trinity-large-preview:free",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1264,
+        656
+      ],
+      "id": "76e1399b-9e2f-4865-b89d-8f801ee99d39",
+      "name": "Arcee",
+      "credentials": {
+        "openRouterApi": {
+          "id": "xZpAyjDIWgQms8rD",
+          "name": "OpenRouter account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API de Clima": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API de Trafico": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Z GLM 4.5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message1": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Update row in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 3 Flash Preview": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Arcee": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Structured Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "db8d09bbe9f4d9927fc4c8a17afea05396ceeae3fa505bb8a1751699adf525b5"
+  }
+}
