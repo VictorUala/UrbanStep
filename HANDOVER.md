@@ -922,10 +922,38 @@ Son los endpoints de HubSpot API (pág 5): POST /crm/v3/objects/contacts, POST /
 
 **Estado del workflow v2 — 66 nodos, activo ✅**
 
+**Structured Output Parser — BUG RESUELTO ✅**
+Root cause: `email_detectado` en el schema tenía `type: "string"` pero el modelo devuelve `null` → validación fallaba → autoFix se disparaba → "Unknown error".
+Fix (propuesto por Grok, validado por Opus): `type: ["string", "null"]` + metadata completa en schema + `additionalProperties: false`.
+Lección: cuando se modifica el prompt hay que actualizar el schema del parser al mismo tiempo.
+
+**Schema final del Structured Output Parser:**
+- 7 campos required: sentimiento, intencion, etapa_funnel, objecion_principal, resumen, prioridad, accion_recomendada
+- email_detectado: type ["string", "null"] — acepta null sin fallar
+- metadata: { tokens_input, tokens_output, tokens_total } — no required, acepta tokens del modelo
+- additionalProperties: false
+- autoFix: true con gpt-4o-mini (OpenAI directo)
+
+**Prompt GPT 2b reforzado:** "IMPORTANTE: Devuelve UNICAMENTE el JSON valido. NADA de texto antes ni despues."
+
+**Upsert HubSpot (Todos) — IMPLEMENTADO ✅**
+- Nodo después de Enriquecer Recurrencia, corre en PARALELO con el Router (no en serie)
+- Crea/actualiza contacto en HubSpot para TODOS los clientes (no solo compra)
+- Campos: email, firstName (primer palabra), lastName (resto), leadStatus mapeado:
+  - awareness → NEW, consideracion → OPEN, decision → IN_PROGRESS, post-venta/nps → CONNECTED
+- Con email fantasma funciona — HubSpot acepta `telegram-{id}@urbanstep.internal`
+- Fix: NO puede estar en serie antes del Router porque el Router lee $json de Enriquecer Recurrencia, no de HubSpot
+
+**Workflow "Consultar HubSpot (Tool)" — CREADO ✅**
+- ID: OZ45sRab1ngEnziI, activo
+- Webhook: POST /webhook/consultar-hubspot + body { "email": "..." }
+- Busca contacto en HubSpot → devuelve nombre, lead_status, lifecycle_stage, deals
+- El MCP de HubSpot (Antigravity) no tiene scopes suficientes para buscar → este workflow es el puente
+
 **Pendiente urgente:**
 1. Probar formulario NPS
 2. Activar Telegram Fidelizacion + Telegram Promo
-3. Workflow de seguimiento automático
+3. Workflow de seguimiento automático (cron diario)
 4. Documento de soporte 2-3 páginas
 5. Google Drive + JSON export
 
