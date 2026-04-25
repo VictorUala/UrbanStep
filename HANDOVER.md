@@ -775,3 +775,273 @@ Victor analizó el flujo nodo por nodo y detectó problemas arquitectónicos fun
 
 **Prompt completo del agent está en el workflow, nodo AI Agent Conversacional.**
 Estructura: REGLAS ABSOLUTAS → DATOS → RAZONAMIENTO (4 pasos) → ROL → CIERRE → SEÑALES
+
+---
+
+## Log 2026-04-23 — Sesión 10 (email fantasma completo + NPS router + fixes varios)
+
+**Deadline actualizado:** Entrega martes 29/04, defensa miércoles 29 o jueves 30/04.
+
+### Email Fantasma — COMPLETO Y FUNCIONANDO ✅
+Problema: cliente de Telegram sin email rompe el pipeline de HubSpot.
+Solución implementada en rama `feature/email-fantasma` (misma base que `feature/parallel-v2`):
+
+**3 pilares:**
+1. Email fantasma `telegram-{id}@urbanstep.internal` en Enriquecer Recurrencia si email=null
+2. Detectar Email Real (Code) — busca regex en mensajes de ENTRADA del cliente después de cada respuesta
+3. IF Email Real para Gmail — si es fantasma → Telegram Confirmacion, si es real → Gmail
+
+**6 nodos nuevos:** Detectar Email Real, IF Email Real Detectado, Actualizar Email en Supabase, HubSpot Sync Email Real, IF Email Real para Gmail, Telegram Confirmacion (sin email)
+
+**Bugs encontrados y corregidos durante las pruebas:**
+- `IF Email Real para Gmail` leía `$json.email` (era la respuesta de HubSpot, no el cliente) → corregido a `$('Enriquecer Recurrencia').first().json.email`
+- `Telegram Confirmacion` usaba `$json.telegram_id` → corregido a `$('Enriquecer Recurrencia').first().json.telegram_id`
+- GPT devolvía `"null"` (string) en email_detectado → Enriquecer Recurrencia ahora filtra `emailDetectado !== 'null'`
+- `IF Disparar Analisis` tenía bug preexistente con operator boolean sin `singleValue: true` → corregido
+
+**Resultado final de prueba:** pipeline completo con email fantasma:
+- Telegram → GPT clasifica compra (intención alta) → email fantasma → HubSpot Deal → IF Email Real para Gmail → FALSE → Telegram Confirmacion → Slack → Log ✅
+- message_id: 313 (mensaje real llegó al Telegram de Victor)
+
+**`appendAttribution: false`** agregado a Telegram Confirmacion (sin email) — quita el "sent with n8n".
+
+### Prompt GPT 2b — REGLA CRITICA de compra
+Agregado: si cliente menciona producto + talle + deseo de comprar → intencion=alta, etapa_funnel=decision SIN IMPORTAR que no dé email.
+Fix colateral: `IF Disparar Analisis` bug de operador booleano corregido al mismo tiempo.
+
+### NPS Router — IMPLEMENTADO ✅
+**Problema:** Router no tenía rama NPS — los formularios NPS caían en fallback.
+**Diagnóstico:**
+- `Construir Prompt Analitico` ya enviaba `[ENCUESTA NPS]` prefix ✅
+- `Structured Output Parser` no aceptaba "nps" como etapa_funnel ❌
+- GPT 2b no sabía qué hacer con NPS ❌
+- Router sin rama NPS ❌
+
+**Fixes aplicados:**
+1. `Structured Output Parser`: agregado "nps" al enum de etapa_funnel
+2. `GPT 2b Analisis` system prompt: REGLA 1 NPS (detecta [ENCUESTA NPS], clasifica por puntuación 0-6=negativo/alta, 7-8=neutro/media, 9-10=positivo/baja) + Ej5 NPS
+3. `Router Decisiones`: agregada regla 7 `etapa_funnel === "nps"` (outputKey: "NPS")
+4. Nodo `Log NPS` agregado (Supabase, rama=nps, igual estructura que otros logs)
+5. Conexiones: Router[6]→Log NPS, Router[7]→Log Fallback (corrido del [6] anterior)
+
+**Estado actual del Router (8 salidas):**
+- [0] Queja urgente: sentimiento=negativo AND prioridad=alta
+- [1] Recurrente: es_recurrente=true
+- [2] Compra inmediata: etapa_funnel=decision AND intencion=alta
+- [3] Post-venta: etapa_funnel=post-venta
+- [4] Nurturing: etapa_funnel=consideracion
+- [5] Exploratorio: etapa_funnel=awareness
+- [6] NPS: etapa_funnel=nps ← NUEVO
+- [7] Fallback (extra)
+
+### Tokens consumidos — decisión arquitectónica
+PDF M2Leccion3 (pág 13) confirma que nodos LLM nativos exponen `tokenUsage.total_tokens`.
+Nuestros AI Agent LangChain solo exponen `{ output: "..." }` — el tokenUsage no sube al output principal.
+Código de Grok para extraerlos devolvería 0 igual (no hay datos en el JSON del Agent).
+**Decisión: mantener tokens_consumidos=0** y explicar en defensa:
+> "El campo está implementado. Usamos AI Agent LangChain que encapsula el modelo. En producción reemplazaríamos por nodo OpenAI nativo que sí expone tokenUsage.total_tokens."
+
+### POST y GET del Material Complementario
+Son los endpoints de HubSpot API (pág 5): POST /crm/v3/objects/contacts, POST /crm/v3/objects/deals, GET /crm/v3/objects/contacts/search. Los nodos HubSpot de n8n los hacen automáticamente.
+
+### Preguntas preparadas para clase consulta 2026-04-23 noche
+1. Tokens: ¿alcanza con 0 o hay que capturar valor real?
+2. Seguimiento automático: ¿mismo workflow o segundo workflow con Schedule Trigger?
+3. Email fantasma: ¿es el approach correcto para Telegram sin email?
+4. Nodos deshabilitados: ¿hay que eliminarlos para la entrega?
+5. seguimiento_enviado: ¿lo agregan al schema de evaluación?
+6. 3 casos de prueba: ¿cuáles exactamente son obligatorios?
+7. Documentación: ¿formato específico o cualquier estructura?
+
+### Pendientes para retomar
+1. **Probar formulario NPS** — enviar un formulario real y verificar que va a rama NPS + Log NPS
+2. ~~Probar formulario comercial~~ ✅ HECHO (ver Log 2026-04-25)
+3. **Seguimiento automático** — segundo workflow con cron diario (profesor confirmó que es correcto hacerlo paralelo)
+4. **Activar Telegram Fidelizacion + Telegram Promo** (deshabilitados)
+5. **Documento de soporte** 2-3 páginas
+6. **Exportar JSON + diagrama + Google Drive**
+7. **Ensayo general** 3+ casos de defensa
+
+---
+
+## Log 2026-04-25 — Sesión 11 (tokens + NPS router + tool compras + formulario)
+
+**Tokens consumidos — IMPLEMENTADO ✅**
+- GPT 2b prompt: pide al modelo que estime `tokens_input`, `tokens_output`, `tokens_total` en sección `metadata`
+- Structured Output Parser: acepta campo `metadata` con los tokens
+- Parsear Analisis: extrae tokens y los expone en el output
+- 8 nodos Log: usan `$('Parsear Analisis').first().json.tokens_total` en vez de 0
+- Técnica validada por el profesor en clase: el modelo estima sus propios tokens
+- Ejemplo real: tokens_total=426 en ejecución 227, tokens_total=154 en ejecución 236
+
+**gpt-4o Analítico — RE-HABILITADO ✅**
+- Estaba disabled desde sesión 3 (no había créditos en OpenRouter)
+- Ahora activo como ai_languageModel[0] del GPT 2b
+- GLM Fallback R2 queda como fallback real
+
+**retryOnFail — RE-HABILITADO ✅**
+- AI Agent Conversacional: retryOnFail=true, maxTries=3, waitBetweenTries=5000
+- GPT 2b Analisis: ídem
+- Estaban en false desde sesión 5 (para testing)
+
+**Modelo autoFix del Structured Output Parser — CAMBIADO ✅**
+- Antes: Z*ai/glm-4.5 (gratuito, rate limits constantes)
+- Ahora: gpt-4o-mini via OpenAI directo (nodo renombrado a "gpt-4o-mini (Parser)")
+
+**Tool Compras Supabase — IMPLEMENTADO Y FUNCIONANDO ✅**
+- Nodo: `Compras por Email (Tool)` — tipo `n8n-nodes-base.supabaseTool`
+- Conectado como ai_tool al GPT 2b Analisis
+- Tabla: `compras_clientes`, filterType: manual, condition: eq, keyValue: `$json.email`
+- onError: continueRegularOutput
+- GPT 2b lo llama automáticamente cuando el cliente menciona recompra
+
+**Construir Prompt Analitico — ACTUALIZADO ✅**
+- Ahora incluye `Email del cliente: {email}` al inicio del historialTexto (cuando hay email disponible)
+- Intenta obtener email de Buscar Cliente Form o Buscar Cliente (con `.all()` + length check, no `.first()`)
+- Permite que GPT 2b pase el email al tool cuando llama a Compras por Email
+- Fix: regex del clean corregida a `\s*` (faltaba el backslash)
+
+**GPT 2b prompt — REGLA 2 RECOMPRA agregada**
+- "Si el cliente menciona querer comprar lo mismo que compró antes → usar tool Compras por Email → clasificar intencion=alta, etapa_funnel=decision"
+
+**Formulario comercial — PROBADO Y FUNCIONANDO ✅**
+- Bug corregido: nodo Crear Cliente Form tenía campo `ciudad` que no existe en tabla `clientes` → removido
+- URL producción: `/form/` (no `/form-test/`)
+- Test con lucia.perez@gmail.com + "Quiero comprar las mismas zapatillas que compré antes"
+- Resultado ejecución 236:
+  - Tool Compras ejecutado ✅ (GPT 2b consultó compras_clientes en tiempo real)
+  - etapa_funnel: decision, intencion: alta ✅
+  - Router → Compra inmediata ✅
+  - accion_recomendada: "Revisar historial y facilitar nueva compra" ✅
+  - tokens_total: 154 ✅
+
+**Clase de consulta — aprendizajes:**
+- Tokens: el modelo puede estimar sus propios tokens → implementado
+- Seguimiento automático: el profesor confirmó que un workflow paralelo con Schedule Trigger es correcto
+- Instance-level MCP de n8n: activado (no afecta nuestro setup, usa MCP propio)
+
+**Estado del workflow v2 — 66 nodos, activo ✅**
+
+**Pendiente urgente:**
+1. Probar formulario NPS
+2. Activar Telegram Fidelizacion + Telegram Promo
+3. Workflow de seguimiento automático
+4. Documento de soporte 2-3 páginas
+5. Google Drive + JSON export
+
+---
+
+## Log 2026-04-22/23 — Sesión 8-9 (commit b1aba2d + email fantasma)
+
+**Commit `b1aba2d` — "sesion 8-9: prompt reingeniería + trigger condicional + NPS form + compras_clientes"**
+
+Trabajo completado y commiteado:
+- Prompt conversacional simplificado (5 casos PDF, TRIGGER_ANALISIS reintroducido)
+- Prompt analítico con 5 few-shot examples alineados al PDF
+- R2 ahora condicional (solo corre cuando TRIGGER:SI)
+- Construir Contexto: 4 msgs para R1, 10 msgs para R2
+- Form NPS implementado (6 nodos + conexiones)
+- Tabla `compras_clientes` creada con 8 registros del PDF
+- Sub-workflow Buscar Compras conectado como tool a GPT 2b
+- Consultar Recurrencia + Consultar Compras (2 nodos Supabase)
+- 5/5 casos de prueba del PDF aprobados
+
+**Prompt refinements (post-feedback del profesor):**
+- Rol cambiado de "calificador puro" a "asistente conversacional que clasifica situaciones comerciales" — balance entre personalidad y no inventar
+- Regla calzado refinada: solo rechaza si el mensaje es EXCLUSIVAMENTE sobre otro tema (serrucho sí, "comprarme algo" no)
+- Email scan: Code busca email en historial de mensajes del cliente con regex
+- Profesor validó el enfoque de handoff ("derivar al equipo") como más maduro que disparar acciones prematuras
+
+**Scripts de fix aplicados en esta sesión:**
+- `opus_fix_role_balance.js` — rol de asistente conversacional
+- `opus_fix_calzado_rule.js` — regla calzado solo para temas exclusivamente no relacionados
+- `opus_fix_email_calzado.js` — email scan en mensajes pasados + regla calzado
+- `fix_prompt_conversacional.js` — prompt simplificado con 5 casos PDF
+- `fix_prompt_analitico_examples.js` — few-shot examples alineados al PDF
+- `fix_prompt_analitico_nps.js` — soporte NPS en prompt analítico
+- `fix_prompt_analitico_10.js` — contexto de 10 msgs para R2
+- `fix_trigger_reintroduce.js` — TRIGGER_ANALISIS condicional
+- `fix_recurrencia_tabla_nueva.js` — tabla compras_clientes
+- `fix_recurrencia_2nodos.js` — 2 nodos Supabase para recurrencia
+- `fix_consultar_recurrencia_email.js` — consulta recurrencia con email
+- `fix_tool_move.js` — mover tool de compras
+- `fix_field_name.js` / `fix_field_name2.js` — correcciones de campos
+
+---
+
+## Log 2026-04-23 — Sesión "Email Fantasma" (rama `feature/email-fantasma`)
+
+**Contexto:** Surge de feedback de los profesores de Henry — cuando un lead llega por Telegram y **nunca da su email**, HubSpot falla porque necesita email para el upsert. Sin email → crash del pipeline entero.
+
+**Rama git:** `feature/email-fantasma` (creada desde `feature/parallel-v2`, misma base)
+
+### Solución implementada — 3 pilares
+
+**Pilar 1 — Email fantasma para HubSpot:**
+- Si no hay email, se genera `telegram-{telegram_id}@urbanstep.internal`
+- Implementado en nodo **Enriquecer Recurrencia** con:
+  ```javascript
+  email: email || ('telegram-' + telegramId + '@urbanstep.internal'),
+  ```
+- Comentario explicativo agregado al Code para el evaluador
+
+**Pilar 2 — Detección automática de email real:**
+- Nodo **Detectar Email Real** (Code, después de Separar Respuesta) busca con regex en mensajes de ENTRADA del cliente
+- Bug de Grok corregido: Grok buscaba email en la respuesta del bot → Claude lo corrigió para buscar en `direccion === 'entrada'`
+- Si encuentra email real → actualiza Supabase + sincroniza HubSpot (reemplaza fantasma por real)
+
+**Pilar 3 — Control antes de Gmail:**
+- Nodo **IF Email Real para Gmail** chequea si email contiene `@urbanstep.internal`
+- Fantasma → confirmación por **Telegram** (nodo "Telegram Confirmacion (sin email)")
+- Real → **Gmail** normalmente
+
+### 6 nodos nuevos agregados al workflow (via `fix_email_fantasma.js`)
+
+| # | Nodo | Tipo | Función |
+|---|------|------|---------|
+| 1 | Detectar Email Real | Code | Regex en mensajes del cliente buscando email |
+| 2 | IF Email Real Detectado | IF | ¿Se encontró email nuevo? |
+| 3 | Actualizar Email en Supabase | Supabase update | Graba email real en tabla clientes |
+| 4 | HubSpot Sync Email Real | HubSpot upsert | Reemplaza fantasma por email real en CRM |
+| 5 | IF Email Real para Gmail | IF | ¿Es fantasma o real? |
+| 6 | Telegram Confirmacion (sin email) | Telegram | Alternativa a Gmail cuando no hay email |
+
+### Conexiones nuevas
+```
+Separar Respuesta → Detectar Email Real → IF Email Real Detectado
+                                           TRUE → Actualizar Email en Supabase → HubSpot Sync Email Real
+                                           FALSE → nada (intencional)
+
+Crear Deal HubSpot → IF Email Real para Gmail
+                      TRUE → Gmail Confirmacion Compra → Slack Alerta Ventas
+                      FALSE → Telegram Confirmacion (sin email) → Slack Alerta Ventas
+```
+
+### Decisiones de diseño
+- Se eligió la versión de Grok (más nodos visibles) sobre la versión simplificada de Claude — más fácil de explicar al evaluador
+- La rama FALSE del IF Email Real Detectado queda sin conexión — intencional
+- Credenciales referenciadas por ID en el script (Supabase: QZ9MiS4xj8Cn3ndq, HubSpot: eehCZEc7e67tc2w5, Telegram: gKN6makwSHpPl3Ln)
+
+### Estado al cortarse la sesión (reset de PC)
+- ✅ Los 6 nodos fueron subidos al workflow via API (script ejecutado)
+- ✅ Victor acomodó gráficamente los nodos en la UI de n8n
+- ✅ Comentario explicativo agregado al Code de Enriquecer Recurrencia
+- ❌ **NO se llegó a probar** — se cortó justo antes de la prueba
+- ❌ `fix_email_fantasma.js` quedó sin commitear (untracked en la rama)
+
+### Pendiente (retomar desde acá)
+1. **Probar el flujo completo** — caso de compra sin dar email:
+   - ¿Se genera email fantasma? ¿HubSpot recibe upsert sin error?
+   - ¿Gmail se salta y se confirma por Telegram?
+   - ¿Si luego el cliente da su email, se actualiza en Supabase y HubSpot?
+2. Commitear `fix_email_fantasma.js` en la rama
+3. Decidir si mergear `feature/email-fantasma` a main/`feature/parallel-v2`
+4. Reactivar retryOnFail en AI Agents antes de defensa
+5. Reactivar Telegram Fidelizacion + Telegram Promo (deshabilitados)
+6. Documento de soporte 2-3 páginas
+7. Exportar JSON + diagrama + Google Drive
+8. Ensayo general de los 3+ casos de defensa
+
+### Recuperación de sesión
+- La sesión fue recuperada el 2026-04-23 leyendo `conversacion_completa.txt` (18k líneas), el script `fix_email_fantasma.js`, el commit `b1aba2d`, y los archivos JSONL de sesión en `C:\Users\Victor\.claude\projects\Z--UrbanStep-Henry\`
+- Sesiones JSONL relevantes: `0f041b71` (20MB, sesión principal), `3d61da51` (140KB, sesión corta), `670c91b3` (277KB, intento de recuperación)
