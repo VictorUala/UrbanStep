@@ -85,7 +85,7 @@ async function main() {
 
     const nps = parseInt(casos[i]?.nps || 0);
     const expSent = nps >= 9 ? 'positivo' : nps >= 7 ? 'neutro' : 'negativo';
-    const expPrio = nps >= 9 ? 'baja' : nps >= 5 ? 'media' : 'alta'; // 0-4=alta(reclamo), 5-8=media, 9-10=baja
+    const expPrio = nps >= 7 ? 'baja' : nps >= 5 ? 'media' : 'alta'; // 0-4=alta(reclamo), 5-6=media, 7-10=baja
 
     const s = j.sentimiento === expSent ? '✅' : '❌';
     const p = j.prioridad === expPrio ? '✅' : '❌';
