@@ -65,7 +65,7 @@ async function main() {
   console.log('-----|---------------------|-----|--------|-------------|-----------|--------|-------');
 
   const list = await getJSON(`/api/v1/executions?workflowId=SDvniUq2L5axPWWu&limit=8`);
-  const execIds = list.data.executions.map(e => e.id).reverse();
+  const execIds = list.data.map(e => e.id).reverse();
 
   let ok = 0, fail = 0;
   for (let i = 0; i < execIds.length && i < 8; i++) {
@@ -85,7 +85,7 @@ async function main() {
 
     const nps = parseInt(casos[i]?.nps || 0);
     const expSent = nps >= 9 ? 'positivo' : nps >= 7 ? 'neutro' : 'negativo';
-    const expPrio = nps >= 9 ? 'baja' : nps >= 7 ? 'media' : 'alta';
+    const expPrio = nps >= 9 ? 'baja' : nps >= 5 ? 'media' : 'alta'; // 0-4=alta(reclamo), 5-8=media, 9-10=baja
 
     const s = j.sentimiento === expSent ? '✅' : '❌';
     const p = j.prioridad === expPrio ? '✅' : '❌';
