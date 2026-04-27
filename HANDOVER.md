@@ -28,7 +28,7 @@
 
 | ID | Nombre | Estado |
 |---|---|---|
-| SDvniUq2L5axPWWu | UrbanStep v2 - Análisis Paralelo | ✅ activo, 75 nodos — **PRINCIPAL** |
+| SDvniUq2L5axPWWu | UrbanStep v2 - Análisis Paralelo | ✅ activo, 87 nodos — **PRINCIPAL** |
 | LQAiZVEE85Iqbppl | UrbanStep — Seguimiento Automático | ✅ activo, 11 nodos |
 | OZ45sRab1ngEnziI | Consultar HubSpot (Tool) | ✅ activo |
 | WystqHlqarqWa4jB | UrbanStep (v1 original) | backup |
@@ -129,6 +129,9 @@ Schedule Trigger (0 12 * * * — 9 AM Argentina)
 - **HubSpot Seguimiento:** usa POST `/crm/v3/objects/contacts/batch/upsert` — crea si no existe, siempre devuelve ID.
 - **retryOnFail:** activo en AI Agent Conversacional y GPT 2b (3x / 5000ms).
 - **Telegram Fidelizacion + Telegram Promo:** habilitados (sesión 12).
+- **HubSpot custom properties:** `etapa_funnel_ia`, `sentimiento_ia`, `intencion_ia`, `objecion_principal_ia`, `prioridad_ia`, `tipo_nps_ia`, `resumen_ia`, `accion_recomendada_ia` — actualizadas en cada conversación via Upsert HubSpot (Todos).
+- **HubSpot Notes (8 nodos paralelos):** Note HS Fidelizacion, Note HS Foto Promo, Note HS Promo, Note HS Foto Catalogo, Note HS NPS Promotor/Friccion/Sugerencia/Seguimiento — registran cada comunicación enviada en el timeline del contacto. Todos con `continueOnFail: true`.
+- **assets_marketing (Supabase):** tabla con URLs de imágenes (promo_recurrente, catalogo_lookbook, logo). Leída en Leer Promo Asset y Leer Catalogo Asset antes de enviar foto.
 
 ---
 
