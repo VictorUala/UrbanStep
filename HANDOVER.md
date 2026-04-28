@@ -5,9 +5,8 @@
 ---
 
 ## Proyecto
-**UrbanStep** — agente conversacional inteligente para empresa de calzado. Canal principal: Telegram Bot + n8n Forms. Analiza conversaciones con OpenAI y ejecuta acciones comerciales en tiempo real.
-
-**Deadline:** Entrega martes 29/04 (HOY), defensa jueves 30/04 (solicitado).
+**UrbanStep** — agente conversacional inteligente para empresa de calzado.
+**Defensa:** jueves 30/04 (solicitado). **Entrega material:** hoy 29/04.
 
 ---
 
@@ -31,92 +30,42 @@
 | SDvniUq2L5axPWWu | UrbanStep v2 - Análisis Paralelo | ✅ activo, ~110 nodos — **PRINCIPAL** (incluye Seguimiento) |
 | LQAiZVEE85Iqbppl | UrbanStep — Seguimiento Automático | ⛔ desactivado (mergeado al principal) |
 | OZ45sRab1ngEnziI | Consultar HubSpot (Tool) | ✅ activo |
-| WystqHlqarqWa4jB | UrbanStep (v1 original) | backup |
 
 ---
 
-## Arquitectura del Workflow Principal
+## Estado de Base de Datos (post-limpieza ensayo)
 
-```
-TRIGGERS: Telegram / n8n Form / NPS Form / Webhook Test / Schedule (Seguimiento)
-
-FLUJO CONVERSACIONAL (Telegram/Form):
-  Extraer Datos → Buscar Cliente → IF Existe → Crear Cliente → Guardar Mensaje → Log Conversacion
-  ↓
-  RAMA 1 (conversacional):
-  Obtener Historial R1 → Construir Contexto Conversacional
-  → AI Agent (gpt-4o-mini + GLM fallback, retryOnFail 3x)
-    [incluye TRIGGER_ANALISIS:SI/NO + TOKENS_R1:input:X,output:Y,total:Z]
-  → Separar Respuesta → Telegram Responder + Guardar Respuesta → Log Conversacion
-  → Detectar Email Real → IF Email Real → Actualizar Supabase + HubSpot Sync
-  ↓
-  RAMA 2 (análisis, paralela con IF Disparar Analisis):
-  Obtener Historial R2 + Consultar Ultima Compra R2 [paralelos]
-  → Construir Prompt Analítico (incluye última compra)
-  → GPT 2b (gpt-4o OpenRouter + GLM fallback) + Structured Output Parser
-  → Parsear Análisis → Guardar Análisis
-  → Consultar Recurrencia → Consultar Compras → Enriquecer Recurrencia
-  → Upsert HubSpot (Todos) → Actualizar Props IA HubSpot (PATCH v3) [paralelo al Router]
-  → Router Decisiones (8 salidas):
-      [0] NPS → Sub-Router NPS (tipo_nps):
-                  promotor → Telegram NPS Promotor → Note HS → Log NPS
-                  reclamo_fuerte → Slack NPS Reclamo → Note HS → Log NPS
-                  friccion_postventa → Telegram NPS Friccion → Note HS → Log NPS
-                  sugerencia_leve → Telegram NPS Sugerencia → Note HS → Log NPS
-                  experiencia_neutra → Telegram NPS Seguimiento → Note HS → Log NPS
-      [1] Queja → Slack #quejas-urgentes → Log Queja
-      [2] Recurrente → Telegram Fidelización → Note HS → Leer Promo Asset → Telegram Foto Promo → Note HS → Log Recurrente
-      [3] Compra → Upsert HubSpot → Deal → IF Email → Gmail/Telegram → Slack → Log Compra
-      [4] Post-venta → Log Post-venta
-      [5] Nurturing → Telegram Promo → Note HS → Leer Catalogo Asset → Telegram Foto Catalogo → Note HS → Log Nurturing
-      [6] Exploratorio → Log Exploratorio
-      [7] Fallback → Log Fallback
-
-SEGUIMIENTO AUTOMÁTICO (Schedule 0 12 * * *):
-  Buscar Pendientes → Obtener Cliente → Construir Mensaje
-  → IF Tiene Telegram → Telegram → Marcar Enviado → Log → HubSpot batch/upsert → Nota HubSpot
-```
+| Tabla | Registros | Nota |
+|---|---|---|
+| clientes | 0 | limpiada para ensayo |
+| mensajes | 0 | limpiada para ensayo |
+| conversaciones | 0 | limpiada para ensayo |
+| logs | 0 | limpiada para ensayo |
+| compras_clientes | 8 | **conservada** — necesaria para probar recurrencia |
+| assets_marketing | 3 | **conservada** — promo, catalogo, logo URLs |
 
 ---
 
-## Schema Supabase
+## Los 3 Casos de Defensa a Probar
 
-| Tabla | Campos clave |
-|---|---|
-| clientes | id, email, nombre, telegram_id, canal_origen, historial_compras[], segmento |
-| mensajes | id, cliente_id, rol, contenido, direccion, canal, timestamp |
-| conversaciones | id, cliente_id, sentimiento, intencion, etapa_funnel, objecion_principal, resumen, prioridad, accion_recomendada, email_detectado, seguimiento_enviado, timestamp |
-| logs | id, cliente_id, workflow_id, rama, estado (exito/error/fallback), detalle (JSON), error_message, timestamp |
-| compras_clientes | email, producto, fecha_compra, canal_venta, monto |
-| assets_marketing | id, tipo, descripcion, url, activo, updated_at |
-
----
-
-## NPS: Clasificación Completa
-
-| NPS | tipo_nps | sentimiento | prioridad | Acción |
-|---|---|---|---|---|
-| 9-10 | promotor | positivo | baja | Telegram NPS Promotor (20% OFF + referral) |
-| 8 | sugerencia_leve | neutro | baja | Telegram NPS Sugerencia |
-| 7 | experiencia_neutra | neutro | baja | Telegram NPS Seguimiento |
-| 5-6 | friccion_postventa | negativo | media | Telegram NPS Friccion (envío gratis) |
-| 0-4 | reclamo_fuerte | negativo | alta | Slack NPS Reclamo (#quejas-urgentes) |
+1. **COMPRA** — cliente nuevo pide zapatilla + talle + da email → HubSpot Deal + Gmail + Slack ventas
+2. **QUEJA** — cliente dice que el producto llegó dañado → Slack #quejas-urgentes
+3. **RECURRENTE** — cliente con compras previas en compras_clientes quiere recomprar → Telegram fidelización + Foto Promo
 
 ---
 
 ## Reglas y Decisiones Críticas
 
-- **Email fantasma:** `telegram-{telegram_id}@urbanstep.bot` — `.bot` = 3 letras OK en HubSpot.
-- **HubSpot custom properties (8):** actualizadas via PATCH /crm/v3/objects/contacts/{vid} (no via nodo HubSpot — devuelve `vid` no `id`).
-- **HubSpot Notes (8 nodos paralelos):** usan `$('Upsert HubSpot (Todos)').first().json.vid` para asociar.
-- **tipo_nps:** NO está en tabla conversaciones Supabase → leerlo de Parsear Analisis en Enriquecer Recurrencia.
-- **Consultar Ultima Compra R2:** corre en paralelo desde IF Disparar Analisis. `$('Consultar Ultima Compra R2').first()` en Construir Prompt Analítico con try/catch.
-- **Log Conversacion:** nodo después de Guardar Respuesta — loggea TODA ejecucion (trigger=true y false).
-- **tokens_r1:** AI Agent incluye `TOKENS_R1: input:X,output:Y,total:Z` al final. Separar Respuesta lo extrae.
-- **Code nodes humanizados:** Construir Contexto, Separar Respuesta, Detectar Email Real, Construir Prompt Analítico, Parsear Analisis, Enriquecer Recurrencia.
-- **Fix Rama 2:** conexión IF Disparar Analisis → Obtener Historial R2 requiere remove+add para activarse.
-- **Seguimiento mergeado:** Schedule Trigger + 10 nodos del Seguimiento están en el workflow principal. LQAiZVEE85Iqbppl desactivado.
-- **Router CHECK:** NPS en [0], luego Queja en [1] (para que NPS negativo no caiga en Queja).
+- **Email fantasma:** `telegram-{telegram_id}@urbanstep.bot` (.bot = 3 letras, HubSpot OK)
+- **HubSpot properties:** usa PATCH /crm/v3/objects/contacts/{vid} (nodo devuelve `vid` no `id`)
+- **HubSpot Notes:** usan `$('Upsert HubSpot (Todos)').first().json.vid`
+- **tipo_nps:** NO está en tabla conversaciones → leerlo de Parsear Analisis en Enriquecer Recurrencia
+- **Consultar Ultima Compra R2:** corre en paralelo desde IF Disparar Analisis, try/catch en Construir Prompt
+- **Log Conversacion:** nodo post Guardar Respuesta — loggea TODA ejecucion
+- **tokens_r1:** AI Agent incluye `TOKENS_R1: input:X,output:Y,total:Z`, Separar Respuesta lo extrae
+- **Fix Rama 2:** conexión IF Disparar Analisis → Obtener Historial R2 requiere remove+add para activarse
+- **Seguimiento:** Schedule Trigger + 10 nodos mergeados al principal. LQAiZVEE85Iqbppl desactivado
+- **Router NPS en [0]:** para que NPS negativo no caiga en Queja antes que en NPS
 
 ---
 
@@ -124,27 +73,24 @@ SEGUIMIENTO AUTOMÁTICO (Schedule 0 12 * * *):
 
 | Archivo | Estado |
 |---|---|
-| `diagrama-flujo.excalidraw` | ✅ listo (v2, ~110 nodos) — PENDIENTE: fix texto router + flecha NPS |
-| `documento-soporte-v3.md` | ✅ listo para entregar (2-3 páginas, tabla Supabase consolidada) |
-| `documento-soporte-v2.md` | referencia personal (schema Supabase detallado) |
-| JSON workflow | pendiente exportar |
-| Google Drive | pendiente subir |
+| `diagrama-flujo.excalidraw` | ✅ listo — pendiente quitar webhooks y actualizar nodo count |
+| `documento-soporte-v3.md` | ✅ listo para entregar |
+| JSON workflow | ⏳ pendiente exportar |
+| Google Drive | ⏳ pendiente subir |
 
 ---
 
-## Pendientes Inmediatos
+## Pendientes Post-Ensayo
 
-1. **Fix diagrama:** texto del Router desborda el rombo + flecha NPS entra en la caja
-2. **Quitar webhooks de prueba** del workflow y actualizar nodo count en título del diagrama
-3. **Exportar JSON + subir a Drive**
-4. **Ensayo general** 3 casos (Compra, Queja, Recurrente)
+1. Quitar webhooks de prueba del workflow
+2. Actualizar nodo count en título del diagrama
+3. Exportar JSON + subir a Drive
 
 ---
 
 ## Canales Slack
 | Canal | ID |
 |---|---|
-| #todo-urbanstep | C0ATC9AP675 |
 | #alertas-ventas | C0AUCUV2VEU |
 | #quejas-urgentes | C0AUCUXV7DW |
 
@@ -152,5 +98,5 @@ SEGUIMIENTO AUTOMÁTICO (Schedule 0 12 * * *):
 
 ## Git
 - Repo: `github.com/VictorUala/UrbanStep`
-- Branch activa: `feature/email-fantasma`
-- Último commit: `8279c98` — sesion 14j diagrama v2 ajustes Grok
+- Branch: `feature/email-fantasma`
+- Último commit: `f9b1d4e` — sesion 14q diagrama router final
