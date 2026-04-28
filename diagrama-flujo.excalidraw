@@ -438,14 +438,13 @@
       "updated": 1714089600000,
       "link": null,
       "locked": false,
-      "text": "PASO 3 · ROUTER\netapa_funnel · intencion\ntipo_nps · es_recurrente · prioridad",
-      "fontSize": 11,
+      "text": "\nPASO 3 · ROUTER\netapa_funnel · intencion\ntipo_nps · es_recurrente · prioridad",
+      "fontSize": 13,
       "fontFamily": 2,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "router",
-      "originalText": "PASO 3 · ROUTER\netapa_funnel · intencion\ntipo_nps · es_recurrente · prioridad",
-
+      "originalText": "\nPASO 3 · ROUTER\netapa_funnel · intencion\ntipo_nps · es_recurrente · prioridad",
       "autoResize": true,
       "lineHeight": 1.25
     },
